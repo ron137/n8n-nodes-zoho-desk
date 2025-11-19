@@ -73,6 +73,15 @@ const TICKET_UPDATE_OPTIONAL_FIELDS = [
 ] as const;
 
 /**
+ * Type guard to check if value is a plain object (not array or null)
+ * @param value - Value to check
+ * @returns True if value is a plain object
+ */
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+	return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
  * Parse comma-separated list and filter out empty values
  * @param value - Comma-separated string (can be undefined)
  * @returns Array of trimmed non-empty values
@@ -103,7 +112,7 @@ function parseCustomFields(cf: unknown): IDataObject {
 		}
 
 		// Validate that parsed result is a plain object (not array or primitive)
-		if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+		if (!isPlainObject(parsed)) {
 			throw new Error('Custom fields must be a JSON object, not an array or primitive value');
 		}
 
@@ -144,8 +153,8 @@ function isValidTicketId(ticketId: string): boolean {
 	const trimmed = ticketId.trim();
 
 	// Allow n8n expressions (e.g., {{$json.ticketId}}) - validation happens at runtime
-	// More robust regex to catch malformed expressions
-	if (/\{\{[^}]+\}\}/.test(trimmed)) {
+	// Regex requires at least one non-whitespace character between braces
+	if (/\{\{.+?\}\}/.test(trimmed)) {
 		return true;
 	}
 
@@ -280,6 +289,7 @@ export class ZohoDesk implements INodeType {
 				typeOptions: {
 					multipleValues: false,
 				},
+				required: true,
 				displayOptions: {
 					show: {
 						resource: ['ticket'],
@@ -817,14 +827,21 @@ export class ZohoDesk implements INodeType {
 						this,
 						'zohoDeskOAuth2Api',
 						options,
-					) as ZohoDeskListResponse<ZohoDeskDepartment>;
+					);
 
-					// Validate response structure
-					if (!response || !Array.isArray(response.data)) {
+					// Runtime validation of API response structure
+					if (!response || typeof response !== 'object' || !('data' in response)) {
+						throw new Error('Invalid API response structure from Zoho Desk');
+					}
+
+					const typedResponse = response as ZohoDeskListResponse<ZohoDeskDepartment>;
+
+					// Validate response data is an array
+					if (!Array.isArray(typedResponse.data)) {
 						return [];
 					}
 
-					return response.data.map((department) => ({
+					return typedResponse.data.map((department) => ({
 						name: department.name,
 						value: department.id,
 					}));
@@ -864,14 +881,21 @@ export class ZohoDesk implements INodeType {
 						this,
 						'zohoDeskOAuth2Api',
 						options,
-					) as ZohoDeskListResponse<ZohoDeskTeam>;
+					);
 
-					// Validate response structure
-					if (!response || !Array.isArray(response.data)) {
+					// Runtime validation of API response structure
+					if (!response || typeof response !== 'object' || !('data' in response)) {
+						throw new Error('Invalid API response structure from Zoho Desk');
+					}
+
+					const typedResponse = response as ZohoDeskListResponse<ZohoDeskTeam>;
+
+					// Validate response data is an array
+					if (!Array.isArray(typedResponse.data)) {
 						return [];
 					}
 
-					return response.data.map((team) => ({
+					return typedResponse.data.map((team) => ({
 						name: team.name,
 						value: team.id,
 					}));
@@ -924,8 +948,8 @@ export class ZohoDesk implements INodeType {
 
 						const contactValues = contactData.contactValues as IDataObject;
 
-						// Type guard for contactValues (exclude arrays since they're technically objects)
-						if (typeof contactValues !== 'object' || contactValues === null || Array.isArray(contactValues)) {
+						// Type guard for contactValues using isPlainObject helper
+						if (!isPlainObject(contactValues)) {
 							throw new Error(
 								'Contact validation failed: Invalid contact data format',
 							);
@@ -947,7 +971,9 @@ export class ZohoDesk implements INodeType {
 						if (contactValues.phone) contact.phone = contactValues.phone;
 						if (contactValues.mobile) contact.mobile = contactValues.mobile;
 
-						// Only add contact if it has at least one property (prevent empty objects)
+						// Defensive check: Only add contact if it has at least one property
+						// This catches edge case where user provides fields that exist but are all empty strings
+						// Example: {email: "", lastName: ""} would pass earlier validation but create empty object
 						if (Object.keys(contact).length > 0) {
 							body.contact = contact;
 						} else {
