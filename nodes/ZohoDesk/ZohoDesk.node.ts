@@ -125,7 +125,10 @@ function parseCustomFields(cf: unknown): IDataObject {
 
 		// Validate that parsed result is a plain object (not array or primitive)
 		if (!isPlainObject(parsed)) {
-			throw new Error('Custom fields must be a JSON object, not an array or primitive value');
+			throw new Error(
+				'Custom fields must be a JSON object, not an array or primitive value. ' +
+				'See: https://desk.zoho.com/support/APIDocument#Tickets#Tickets_CreateTicket'
+			);
 		}
 
 		return parsed as IDataObject;
@@ -133,7 +136,8 @@ function parseCustomFields(cf: unknown): IDataObject {
 		const errorMessage = error instanceof Error ? error.message : String(error);
 		throw new Error(
 			`Custom fields must be valid JSON. Parse error: ${errorMessage}. ` +
-				`Please ensure your JSON is properly formatted, e.g., {"cf_field": "value"}`,
+			`Please ensure your JSON is properly formatted, e.g., {"cf_field": "value"}. ` +
+			'See: https://desk.zoho.com/support/APIDocument#Tickets#Tickets_CreateTicket',
 		);
 	}
 }
@@ -842,16 +846,12 @@ export class ZohoDesk implements INodeType {
 					);
 
 					// Runtime validation of API response structure
-					if (!response || typeof response !== 'object' || !('data' in response)) {
+					if (!response || typeof response !== 'object' ||
+						!('data' in response) || !Array.isArray(response.data)) {
 						throw new Error('Invalid API response structure from Zoho Desk');
 					}
 
 					const typedResponse = response as ZohoDeskListResponse<ZohoDeskDepartment>;
-
-					// Validate response data is an array
-					if (!Array.isArray(typedResponse.data)) {
-						return [];
-					}
 
 					return typedResponse.data.map((department) => ({
 						name: department.name,
@@ -896,16 +896,12 @@ export class ZohoDesk implements INodeType {
 					);
 
 					// Runtime validation of API response structure
-					if (!response || typeof response !== 'object' || !('data' in response)) {
+					if (!response || typeof response !== 'object' ||
+						!('data' in response) || !Array.isArray(response.data)) {
 						throw new Error('Invalid API response structure from Zoho Desk');
 					}
 
 					const typedResponse = response as ZohoDeskListResponse<ZohoDeskTeam>;
-
-					// Validate response data is an array
-					if (!Array.isArray(typedResponse.data)) {
-						return [];
-					}
 
 					return typedResponse.data.map((team) => ({
 						name: team.name,
@@ -954,7 +950,8 @@ export class ZohoDesk implements INodeType {
 						// 3. Either email OR lastName must be provided (Zoho Desk requirement)
 						if (!contactData || !contactData.contactValues) {
 							throw new Error(
-								'Contact information is required for ticket creation. Please provide at least email or lastName.',
+								'Contact information is required for ticket creation. Please provide at least email or lastName. ' +
+								'See: https://desk.zoho.com/support/APIDocument#Tickets#Tickets_CreateTicket',
 							);
 						}
 
@@ -963,14 +960,16 @@ export class ZohoDesk implements INodeType {
 						// Type guard for contactValues using isPlainObject helper
 						if (!isPlainObject(contactValues)) {
 							throw new Error(
-								'Contact validation failed: Invalid contact data format',
+								'Contact validation failed: Invalid contact data format. ' +
+								'See: https://desk.zoho.com/support/APIDocument#Tickets#Tickets_CreateTicket',
 							);
 						}
 
 						// Validate that at least email or lastName is provided (Zoho Desk API requirement)
 						if (!contactValues.email && !contactValues.lastName) {
 							throw new Error(
-								'Contact validation failed: Either email or lastName must be provided for the contact',
+								'Contact validation failed: Either email or lastName must be provided for the contact. ' +
+								'See: https://desk.zoho.com/support/APIDocument#Tickets#Tickets_CreateTicket',
 							);
 						}
 
@@ -997,7 +996,8 @@ export class ZohoDesk implements INodeType {
 						// This catches edge cases like {email: "", lastName: "", firstName: "John"}
 						if (!contact.email && !contact.lastName) {
 							throw new Error(
-								'Contact validation failed: Either email or lastName must have a non-empty value',
+								'Contact validation failed: Either email or lastName must have a non-empty value. ' +
+								'See: https://desk.zoho.com/support/APIDocument#Tickets#Tickets_CreateTicket',
 							);
 						}
 
@@ -1043,7 +1043,8 @@ export class ZohoDesk implements INodeType {
 						// Validate ticket ID format (should be numeric)
 						if (!isValidTicketId(ticketId)) {
 							throw new Error(
-								`Invalid ticket ID format: "${ticketId}". Ticket ID must be a numeric value.`,
+								`Invalid ticket ID format: "${ticketId}". Ticket ID must be a numeric value. ` +
+								'See: https://desk.zoho.com/support/APIDocument#Tickets#Tickets_UpdateTicket',
 							);
 						}
 

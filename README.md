@@ -186,10 +186,12 @@ Zoho Desk API has the following rate limits:
 - 10 requests per second per organization
 - 5000 API calls per day
 
-**Rate Limit Handling**: The node detects when rate limits are exceeded (HTTP 429 errors) and provides clear, actionable error messages. If you encounter rate limit errors, you can:
-- Reduce the number of items being processed in a single workflow execution
-- Add delays between workflow runs
-- Use the "Continue On Fail" setting to handle rate limit errors gracefully
+**Rate Limit Handling**: When rate limits are exceeded (HTTP 429), the node provides clear error messages with actionable guidance:
+- Suggests reducing the number of items being processed in a single workflow execution
+- Recommends adding delays between workflow runs
+- Works with "Continue On Fail" setting for graceful degradation
+
+Note: The node detects rate limiting but does not automatically retry requests. You should implement retry logic in your workflow if needed.
 
 ## Supported Zoho Data Centers
 
