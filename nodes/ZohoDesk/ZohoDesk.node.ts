@@ -123,6 +123,13 @@ const FIELD_LENGTH_LIMITS = {
 const N8N_EXPRESSION_PATTERN = /\{\{.+?\}\}/;
 const RFC5322_EMAIL_PATTERN = /^[a-zA-Z0-9.!#$%&'*+\/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
 const ZOHO_DESK_ID_PATTERN = /^\d{10,}$/;
+const TICKET_ID_PATTERN = new RegExp(`^\\d{${MIN_TICKET_ID_LENGTH},}$`);
+
+/**
+ * Zoho Desk API documentation URLs
+ */
+const ZOHO_DESK_CREATE_TICKET_DOCS = 'https://desk.zoho.com/support/APIDocument#Tickets#Tickets_CreateTicket';
+const ZOHO_DESK_UPDATE_TICKET_DOCS = 'https://desk.zoho.com/support/APIDocument#Tickets#Tickets_UpdateTicket';
 
 /**
  * HTTP error interface for proper error type handling
@@ -175,7 +182,7 @@ function parseCustomFields(cf: unknown): IDataObject {
 		if (!isPlainObject(parsed)) {
 			throw new Error(
 				'Custom fields must be a JSON object, not an array or primitive value. ' +
-				'See: https://desk.zoho.com/support/APIDocument#Tickets#Tickets_CreateTicket'
+				'See: ' + ZOHO_DESK_CREATE_TICKET_DOCS
 			);
 		}
 
@@ -207,7 +214,7 @@ function parseCustomFields(cf: unknown): IDataObject {
 		throw new Error(
 			`Custom fields must be valid JSON. Parse error: ${errorMessage}. ` +
 			`Please ensure your JSON is properly formatted, e.g., {"cf_field": "value"}. ` +
-			'See: https://desk.zoho.com/support/APIDocument#Tickets#Tickets_CreateTicket',
+			'See: ' + ZOHO_DESK_CREATE_TICKET_DOCS,
 		);
 	}
 }
@@ -265,9 +272,8 @@ function isValidTicketId(ticketId: string): boolean {
 	}
 
 	// Zoho Desk ticket IDs are typically 16-19 digit numeric strings
-	// Use constant for minimum length to allow flexibility across configurations
-	const pattern = new RegExp(`^\\d{${MIN_TICKET_ID_LENGTH},}$`);
-	return pattern.test(trimmed);
+	// Use pre-compiled pattern for performance
+	return TICKET_ID_PATTERN.test(trimmed);
 }
 
 /**
@@ -366,7 +372,7 @@ function addContactField(
 	if (fieldType !== 'string' && fieldType !== 'number') {
 		throw new Error(
 			`Contact validation failed: ${fieldLabel} must be a string or number, not a complex object. ` +
-			'See: https://desk.zoho.com/support/APIDocument#Tickets#Tickets_CreateTicket',
+			'See: ' + ZOHO_DESK_CREATE_TICKET_DOCS,
 		);
 	}
 
@@ -381,7 +387,7 @@ function addContactField(
 		if (fieldName === 'email' && !isValidEmail(cleaned)) {
 			throw new Error(
 				`Contact validation failed: Invalid email format "${cleaned}". ` +
-				'See: https://desk.zoho.com/support/APIDocument#Tickets#Tickets_CreateTicket',
+				'See: ' + ZOHO_DESK_CREATE_TICKET_DOCS,
 			);
 		}
 
@@ -1179,33 +1185,42 @@ export class ZohoDesk implements INodeType {
 							if (!isPlainObject(contactValues)) {
 								throw new Error(
 									'Contact validation failed: Invalid contact data format. ' +
-									'See: https://desk.zoho.com/support/APIDocument#Tickets#Tickets_CreateTicket',
+									'See: ' + ZOHO_DESK_CREATE_TICKET_DOCS,
 								);
 							}
 
-							// Build contact object with available non-empty fields
-							// Zoho Desk will automatically match by email or create new contact
-							// Type validation ensures we only coerce strings/numbers, not complex objects
-							const contact: IDataObject = {};
+							// Check if any non-empty values exist before processing
+							// This prevents unnecessary validation errors when user provides empty contact fields
+							const hasNonEmptyValue = Object.values(contactValues).some(
+								value => value && String(value).trim() !== ''
+							);
 
-							// Use helper function to add contact fields with validation and CRLF sanitization
-							// Only email has a documented length limit (RFC 5321), others validated by API
-							addContactField(contact, contactValues, 'email', 'email', FIELD_LENGTH_LIMITS.email);
-							addContactField(contact, contactValues, 'lastName', 'lastName', undefined);
-							addContactField(contact, contactValues, 'firstName', 'firstName', undefined);
-							addContactField(contact, contactValues, 'phone', 'phone', undefined);
-							addContactField(contact, contactValues, 'mobile', 'mobile', undefined);
+							if (hasNonEmptyValue) {
+								// Build contact object with available non-empty fields
+								// Zoho Desk will automatically match by email or create new contact
+								// Type validation ensures we only coerce strings/numbers, not complex objects
+								const contact: IDataObject = {};
 
-							// Validation: if contact is provided, ensure at least email or lastName has a non-empty value
-							// This catches all edge cases in one place
-							if (!contact.email && !contact.lastName) {
-								throw new Error(
-									'Contact validation failed: If contact is provided, either email or lastName must have a non-empty value. ' +
-									'See: https://desk.zoho.com/support/APIDocument#Tickets#Tickets_CreateTicket',
-								);
+								// Use helper function to add contact fields with validation and CRLF sanitization
+								// Only email has a documented length limit (RFC 5321), others validated by API
+								addContactField(contact, contactValues, 'email', 'email', FIELD_LENGTH_LIMITS.email);
+								addContactField(contact, contactValues, 'lastName', 'lastName', undefined);
+								addContactField(contact, contactValues, 'firstName', 'firstName', undefined);
+								addContactField(contact, contactValues, 'phone', 'phone', undefined);
+								addContactField(contact, contactValues, 'mobile', 'mobile', undefined);
+
+								// Validation: if contact has values, ensure at least email or lastName is present
+								// This catches edge cases where only firstName/phone/mobile are provided
+								if (!contact.email && !contact.lastName) {
+									throw new Error(
+										'Contact validation failed: Either email or lastName must be provided. ' +
+										'See: ' + ZOHO_DESK_CREATE_TICKET_DOCS,
+									);
+								}
+
+								body.contact = contact;
 							}
-
-							body.contact = contact;
+							// If all values are empty, skip contact entirely (no error thrown)
 						}
 
 						// Add common fields (description, dueDate, priority, secondaryContacts, custom fields)
@@ -1251,7 +1266,7 @@ export class ZohoDesk implements INodeType {
 						if (!isValidTicketId(ticketId)) {
 							throw new Error(
 								`Invalid ticket ID format: "${ticketId}". Ticket ID must be a numeric value. ` +
-								'See: https://desk.zoho.com/support/APIDocument#Tickets#Tickets_UpdateTicket',
+								'See: ' + ZOHO_DESK_UPDATE_TICKET_DOCS,
 							);
 						}
 
