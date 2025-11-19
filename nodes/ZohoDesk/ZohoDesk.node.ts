@@ -88,17 +88,26 @@ function parseCommaSeparatedList(value: string | undefined): string[] {
 }
 
 /**
- * Parse custom fields JSON with enhanced error handling
+ * Parse custom fields JSON with enhanced error handling and type validation
  * @param cf - Custom fields as JSON string or object
  * @returns Parsed custom fields object
- * @throws Error with detailed message if JSON parsing fails
+ * @throws Error with detailed message if JSON parsing fails or result is not a plain object
  */
 function parseCustomFields(cf: unknown): IDataObject {
 	try {
+		let parsed: unknown;
 		if (typeof cf === 'string') {
-			return JSON.parse(cf) as IDataObject;
+			parsed = JSON.parse(cf);
+		} else {
+			parsed = cf;
 		}
-		return cf as IDataObject;
+
+		// Validate that parsed result is a plain object (not array or primitive)
+		if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+			throw new Error('Custom fields must be a JSON object, not an array or primitive value');
+		}
+
+		return parsed as IDataObject;
 	} catch (error) {
 		const errorMessage = error instanceof Error ? error.message : String(error);
 		throw new Error(
@@ -135,7 +144,8 @@ function isValidTicketId(ticketId: string): boolean {
 	const trimmed = ticketId.trim();
 
 	// Allow n8n expressions (e.g., {{$json.ticketId}}) - validation happens at runtime
-	if (trimmed.includes('{{') && trimmed.includes('}}')) {
+	// More robust regex to catch malformed expressions
+	if (/\{\{[^}]+\}\}/.test(trimmed)) {
 		return true;
 	}
 
@@ -830,26 +840,26 @@ export class ZohoDesk implements INodeType {
 			 * @returns Array of team options for dropdown, or empty array if department not selected
 			 */
 			async getTeams(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
-				const credentials = await this.getCredentials('zohoDeskOAuth2Api');
-				const orgId = credentials.orgId as string;
-				const baseUrl = (credentials.baseUrl as string | undefined) || 'https://desk.zoho.com/api/v1';
-				const departmentId = this.getCurrentNodeParameter('departmentId');
-
-				// Type guard: departmentId is optional in update operation
-				if (!departmentId || typeof departmentId !== 'string') {
-					return [];
-				}
-
-				const options = {
-					method: 'GET',
-					headers: {
-						'orgId': orgId,
-					},
-					uri: `${baseUrl}/departments/${departmentId}/teams`,
-					json: true,
-				};
-
 				try {
+					const credentials = await this.getCredentials('zohoDeskOAuth2Api');
+					const orgId = credentials.orgId as string;
+					const baseUrl = (credentials.baseUrl as string | undefined) || 'https://desk.zoho.com/api/v1';
+					const departmentId = this.getCurrentNodeParameter('departmentId');
+
+					// Type guard: departmentId is optional in update operation
+					if (!departmentId || typeof departmentId !== 'string') {
+						return [];
+					}
+
+					const options = {
+						method: 'GET',
+						headers: {
+							'orgId': orgId,
+						},
+						uri: `${baseUrl}/departments/${encodeURIComponent(departmentId)}/teams`,
+						json: true,
+					};
+
 					const response = await this.helpers.requestOAuth2.call(
 						this,
 						'zohoDeskOAuth2Api',
@@ -866,8 +876,8 @@ export class ZohoDesk implements INodeType {
 						value: team.id,
 					}));
 				} catch (error) {
-					// Return empty array if department has no teams or if there's an API error
-					// This prevents the UI from breaking when a department has no teams
+					// Return empty array on error to prevent UI breaks
+					// Consistent error handling with getDepartments
 					return [];
 				}
 			},
@@ -936,7 +946,15 @@ export class ZohoDesk implements INodeType {
 						if (contactValues.firstName) contact.firstName = contactValues.firstName;
 						if (contactValues.phone) contact.phone = contactValues.phone;
 						if (contactValues.mobile) contact.mobile = contactValues.mobile;
-						body.contact = contact;
+
+						// Only add contact if it has at least one property (prevent empty objects)
+						if (Object.keys(contact).length > 0) {
+							body.contact = contact;
+						} else {
+							throw new Error(
+								'Contact validation failed: At least one contact field must have a non-empty value',
+							);
+						}
 
 						// Add common fields (description, dueDate, priority, secondaryContacts, custom fields)
 						addCommonTicketFields(body, additionalFields);
@@ -1004,7 +1022,7 @@ export class ZohoDesk implements INodeType {
 								'orgId': orgId,
 							},
 							body,
-							uri: `${baseUrl}/tickets/${ticketId}`,
+							uri: `${baseUrl}/tickets/${encodeURIComponent(ticketId)}`,
 							json: true,
 						};
 
@@ -1017,10 +1035,31 @@ export class ZohoDesk implements INodeType {
 					}
 				}
 			} catch (error) {
+				// Check for rate limiting (HTTP 429)
+				const errorObj = error as any;
+				if (errorObj.statusCode === 429 || errorObj.code === 429) {
+					const rateLimitError = new Error(
+						'Zoho Desk API rate limit exceeded (10 requests/second per organization). ' +
+						'Please wait a moment and try again, or reduce the number of items being processed.',
+					);
+					if (this.continueOnFail()) {
+						returnData.push({
+							json: {
+								error: rateLimitError.message,
+							},
+							pairedItem: { item: i },
+						});
+						continue;
+					}
+					throw rateLimitError;
+				}
+
+				// Handle other errors
 				if (this.continueOnFail()) {
+					const errorMessage = error instanceof Error ? error.message : String(error);
 					returnData.push({
 						json: {
-							error: error.message,
+							error: errorMessage,
 						},
 						pairedItem: { item: i },
 					});
