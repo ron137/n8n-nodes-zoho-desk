@@ -1,19 +1,27 @@
 {
-  "name": "n8n-nodes-zoho-desk",
+  "name": "@enthu/n8n-nodes-zoho-desk",
   "version": "0.1.0",
   "description": "n8n community node for Zoho Desk API integration",
   "keywords": [
-    "n8n-community-node-package"
+    "n8n-community-node-package",
+    "n8n",
+    "zoho",
+    "zoho-desk",
+    "enthu"
   ],
   "license": "MIT",
-  "homepage": "",
+  "homepage": "https://github.com/enthuziastic/n8n-nodes-zoho-desk",
   "author": {
-    "name": "Pratik Khadloya",
+    "name": "Enthuziastic",
     "email": "tispratik@gmail.com"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Enthuziastic/n8n-nodes-zoho-desk.git"
+    "url": "git+https://github.com/enthuziastic/n8n-nodes-zoho-desk.git"
+  },
+  "publishConfig": {
+    "access": "public",
+    "@enthu:registry": "https://registry.npmjs.org"
   },
   "engines": {
     "node": ">=18.10"
@@ -23,7 +31,8 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "format": "prettier nodes credentials --write",
-    "lint": "eslint nodes credentials"
+    "lint": "eslint nodes credentials",
+    "prepublishOnly": "npm run build"
   },
   "files": [
     "dist"
