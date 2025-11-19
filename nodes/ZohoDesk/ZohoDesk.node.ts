@@ -104,30 +104,25 @@ const ZOHO_DESK_API_VERSION = 'v1';
 const DEFAULT_BASE_URL = `https://desk.zoho.com/api/${ZOHO_DESK_API_VERSION}`;
 
 /**
- * Recommended field length limits based on common database constraints and best practices.
+ * Field length limits with documented standards.
  *
- * NOTE: These are RECOMMENDED limits, not officially documented by Zoho Desk API.
- * They are based on:
- * - Standard VARCHAR limits for database fields
- * - Best practices for form validation
- * - Reasonable limits for user input
+ * IMPORTANT: Only includes limits that are based on official standards or would cause
+ * system issues if exceeded. For fields without documented limits, we rely on the
+ * Zoho Desk API to return validation errors.
  *
- * If you encounter API errors related to field lengths, these limits may need adjustment.
- * Reference: https://desk.zoho.com/support/APIDocument#Tickets
+ * This approach prevents false rejections of valid user input while still providing
+ * protection for fields with known constraints.
  */
 const FIELD_LENGTH_LIMITS = {
-	subject: 255,        // Typical subject line limit
-	email: 254,          // RFC 5321 maximum email length
-	firstName: 120,      // Common name field limit
-	lastName: 120,       // Common name field limit
-	phone: 50,           // Sufficient for international phone formats
-	mobile: 50,          // Sufficient for international mobile formats
-	description: 30000,  // Generous limit for ticket descriptions
-	resolution: 30000,   // Generous limit for resolution notes
-	category: 100,       // Typical category name limit
-	subCategory: 100,    // Typical subcategory name limit
-	tag: 50,             // Individual tag length limit
+	email: 254,  // RFC 5321 maximum email length - official standard
 } as const;
+
+/**
+ * Pre-compiled regex patterns for performance optimization
+ */
+const N8N_EXPRESSION_PATTERN = /\{\{.+?\}\}/;
+const RFC5322_EMAIL_PATTERN = /^[a-zA-Z0-9.!#$%&'*+\/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
+const ZOHO_DESK_ID_PATTERN = /^\d{10,}$/;
 
 /**
  * HTTP error interface for proper error type handling
@@ -189,7 +184,7 @@ function parseCustomFields(cf: unknown): IDataObject {
 		for (const [key, value] of Object.entries(parsed)) {
 			if (typeof value === 'string') {
 				// Remove CRLF from custom field values (no length limit specified)
-				sanitized[key] = removeCRLF(value, undefined, `Custom field "${key}"`);
+				sanitized[key] = sanitizeCRLF(value, undefined, `Custom field "${key}"`);
 			} else if (value !== null && value !== undefined) {
 				// Keep non-string, non-null values as-is
 				sanitized[key] = value as string | number | boolean | IDataObject;
@@ -198,7 +193,7 @@ function parseCustomFields(cf: unknown): IDataObject {
 
 		return sanitized;
 	} catch (error) {
-		// Check if error is already a validation error from isPlainObject check or removeCRLF
+		// Check if error is already a validation error from isPlainObject check or sanitizeCRLF
 		if (error instanceof Error && (
 			error.message.includes('Custom fields must be a JSON object') ||
 			error.message.includes('exceeds maximum length')
@@ -231,11 +226,11 @@ function addOptionalFields(
 ): void {
 	for (const field of fields) {
 		if (source[field] !== undefined) {
-			// Remove CRLF from string fields (XSS protection handled by Zoho Desk API)
+			// Sanitize CRLF from string fields (XSS protection handled by Zoho Desk API)
 			if (typeof source[field] === 'string') {
 				const stringValue = source[field] as string;
 
-				// Validate ID fields
+				// Validate ID fields - empty strings are allowed (Zoho Desk API will ignore them)
 				if (field.endsWith('Id') && stringValue.trim() !== '') {
 					const fieldName = field.charAt(0).toUpperCase() + field.slice(1);
 					isValidZohoDeskId(stringValue, fieldName);
@@ -247,7 +242,7 @@ function addOptionalFields(
 					: undefined;
 				// Capitalize field name for better error messages
 				const fieldName = field.charAt(0).toUpperCase() + field.slice(1);
-				body[field] = removeCRLF(stringValue, maxLength, fieldName);
+				body[field] = sanitizeCRLF(stringValue, maxLength, fieldName);
 			} else {
 				body[field] = source[field];
 			}
@@ -264,8 +259,8 @@ function isValidTicketId(ticketId: string): boolean {
 	const trimmed = ticketId.trim();
 
 	// Allow n8n expressions (e.g., {{$json.ticketId}}) - validation happens at runtime
-	// Regex requires at least one non-whitespace character between braces
-	if (/\{\{.+?\}\}/.test(trimmed)) {
+	// Use pre-compiled pattern for performance
+	if (N8N_EXPRESSION_PATTERN.test(trimmed)) {
 		return true;
 	}
 
@@ -285,14 +280,15 @@ function isValidZohoDeskId(id: string, fieldName: string): boolean {
 	const trimmed = id.trim();
 
 	// Allow n8n expressions - validation happens at runtime
-	if (/\{\{.+?\}\}/.test(trimmed)) {
+	// Use pre-compiled pattern for performance
+	if (N8N_EXPRESSION_PATTERN.test(trimmed)) {
 		return true;
 	}
 
 	// Zoho Desk IDs are numeric strings (minimum 10 digits for safety)
 	// Less strict than ticket IDs as different resources may have different lengths
-	const pattern = /^\d{10,}$/;
-	if (!pattern.test(trimmed)) {
+	// Use pre-compiled pattern for performance
+	if (!ZOHO_DESK_ID_PATTERN.test(trimmed)) {
 		throw new Error(
 			`Invalid ${fieldName} format: "${trimmed}". ` +
 			`${fieldName} must be a numeric value with at least 10 digits.`,
@@ -303,9 +299,14 @@ function isValidZohoDeskId(id: string, fieldName: string): boolean {
 }
 
 /**
- * Remove CRLF characters from string input to prevent header injection attacks.
+ * Sanitize CRLF characters from string input to prevent header injection attacks.
  *
- * SECURITY NOTE: This function does NOT protect against XSS attacks. It only removes
+ * IMPORTANT: This function replaces CRLF characters with spaces to preserve content length
+ * and prevent data loss. For example:
+ * - Input: "Line 1\nLine 2\nLine 3"
+ * - Output: "Line 1 Line 2 Line 3"
+ *
+ * SECURITY NOTE: This function does NOT protect against XSS attacks. It only sanitizes
  * carriage return and line feed characters to prevent HTTP header injection.
  *
  * Zoho Desk API is expected to handle HTML/JavaScript escaping server-side.
@@ -314,22 +315,22 @@ function isValidZohoDeskId(id: string, fieldName: string): boolean {
  * @param value - String value to process
  * @param maxLength - Maximum allowed length (optional). Throws error if exceeded.
  * @param fieldName - Field name for error messages (optional, defaults to 'Field')
- * @returns String with CRLF characters removed
+ * @returns String with CRLF characters replaced by spaces
  * @throws Error if value exceeds maxLength
  */
-function removeCRLF(value: string, maxLength?: number, fieldName?: string): string {
-	// Remove CRLF injection characters to prevent header injection
-	const cleaned = value.replace(/[\r\n]/g, '');
+function sanitizeCRLF(value: string, maxLength?: number, fieldName?: string): string {
+	// Replace CRLF with spaces to prevent header injection while preserving formatting intent
+	const sanitized = value.replace(/[\r\n]/g, ' ');
 
 	// Enforce length limit if specified - THROW ERROR instead of silent truncation
-	if (maxLength && cleaned.length > maxLength) {
+	if (maxLength && sanitized.length > maxLength) {
 		throw new Error(
-			`${fieldName || 'Field'} exceeds maximum length of ${maxLength} characters (${cleaned.length} provided). ` +
+			`${fieldName || 'Field'} exceeds maximum length of ${maxLength} characters (${sanitized.length} provided). ` +
 			'Please shorten your input and try again.',
 		);
 	}
 
-	return cleaned;
+	return sanitized;
 }
 
 /**
@@ -338,12 +339,9 @@ function removeCRLF(value: string, maxLength?: number, fieldName?: string): stri
  * @returns True if email format is valid
  */
 function isValidEmail(email: string): boolean {
-	// RFC 5322 compliant regex (simplified version)
-	// Validates structure and common special characters
-	const emailRegex = /^[a-zA-Z0-9.!#$%&'*+\/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
-
+	// Use pre-compiled RFC 5322 compliant regex for performance
 	// RFC 5321 maximum email length is 254 characters
-	return emailRegex.test(email) && email.length <= 254;
+	return RFC5322_EMAIL_PATTERN.test(email) && email.length <= FIELD_LENGTH_LIMITS.email;
 }
 
 /**
@@ -372,10 +370,12 @@ function addContactField(
 		);
 	}
 
+	// Type check above guarantees only string/number reach this point (no objects/arrays)
+	// Safe to coerce to string since numbers will become their string representation
 	const fieldStr = String(contactValues[fieldName]).trim();
 	if (fieldStr !== '') {
-		// Remove CRLF characters (does NOT protect against XSS - handled by Zoho Desk API)
-		const cleaned = removeCRLF(fieldStr, maxLength, `Contact ${fieldLabel}`);
+		// Sanitize CRLF characters (does NOT protect against XSS - handled by Zoho Desk API)
+		const cleaned = sanitizeCRLF(fieldStr, maxLength, `Contact ${fieldLabel}`);
 
 		// Additional validation for email field
 		if (fieldName === 'email' && !isValidEmail(cleaned)) {
@@ -397,9 +397,10 @@ function addContactField(
  */
 function addCommonTicketFields(body: IDataObject, fields: IDataObject): void {
 	if (fields.description !== undefined) {
-		// Remove CRLF characters from description (XSS protection handled by Zoho Desk API)
+		// Sanitize CRLF characters from description (XSS protection handled by Zoho Desk API)
+		// No length limit - let Zoho Desk API validate
 		body.description = typeof fields.description === 'string'
-			? removeCRLF(fields.description, FIELD_LENGTH_LIMITS.description, 'Description')
+			? sanitizeCRLF(fields.description, undefined, 'Description')
 			: fields.description;
 	}
 	if (fields.dueDate !== undefined) {
@@ -1156,8 +1157,9 @@ export class ZohoDesk implements INodeType {
 						const contactData = this.getNodeParameter('contact', i) as IDataObject;
 						const additionalFields = this.getNodeParameter('additionalFields', i) as IDataObject;
 
-						// Remove CRLF characters from subject (XSS protection handled by Zoho Desk API)
-						const subject = removeCRLF(rawSubject, FIELD_LENGTH_LIMITS.subject, 'Subject');
+						// Sanitize CRLF characters from subject (XSS protection handled by Zoho Desk API)
+						// No length limit - let Zoho Desk API validate
+						const subject = sanitizeCRLF(rawSubject, undefined, 'Subject');
 
 						const body: IDataObject = {
 							departmentId,
@@ -1186,12 +1188,13 @@ export class ZohoDesk implements INodeType {
 							// Type validation ensures we only coerce strings/numbers, not complex objects
 							const contact: IDataObject = {};
 
-							// Use helper function to add contact fields with validation and CRLF removal
+							// Use helper function to add contact fields with validation and CRLF sanitization
+							// Only email has a documented length limit (RFC 5321), others validated by API
 							addContactField(contact, contactValues, 'email', 'email', FIELD_LENGTH_LIMITS.email);
-							addContactField(contact, contactValues, 'lastName', 'lastName', FIELD_LENGTH_LIMITS.lastName);
-							addContactField(contact, contactValues, 'firstName', 'firstName', FIELD_LENGTH_LIMITS.firstName);
-							addContactField(contact, contactValues, 'phone', 'phone', FIELD_LENGTH_LIMITS.phone);
-							addContactField(contact, contactValues, 'mobile', 'mobile', FIELD_LENGTH_LIMITS.mobile);
+							addContactField(contact, contactValues, 'lastName', 'lastName', undefined);
+							addContactField(contact, contactValues, 'firstName', 'firstName', undefined);
+							addContactField(contact, contactValues, 'phone', 'phone', undefined);
+							addContactField(contact, contactValues, 'mobile', 'mobile', undefined);
 
 							// Validation: if contact is provided, ensure at least email or lastName has a non-empty value
 							// This catches all edge cases in one place
@@ -1211,10 +1214,11 @@ export class ZohoDesk implements INodeType {
 						// Add other additional fields
 						addOptionalFields(body, additionalFields, TICKET_CREATE_OPTIONAL_FIELDS);
 
-						// Handle tags with filtering of empty values and CRLF removal
+						// Handle tags with filtering of empty values and CRLF sanitization
+						// No length limit - let Zoho Desk API validate
 						if (additionalFields.tags && typeof additionalFields.tags === 'string') {
 							const tags = parseCommaSeparatedList(additionalFields.tags)
-								.map(tag => removeCRLF(tag, FIELD_LENGTH_LIMITS.tag, 'Tag'));
+								.map(tag => sanitizeCRLF(tag, undefined, 'Tag'));
 							if (tags.length > 0) {
 								body.tags = tags;
 							}
@@ -1259,10 +1263,11 @@ export class ZohoDesk implements INodeType {
 						// Add other update fields
 						addOptionalFields(body, updateFields, TICKET_UPDATE_OPTIONAL_FIELDS);
 
-						// Handle tags with filtering of empty values and CRLF removal
+						// Handle tags with filtering of empty values and CRLF sanitization
+						// No length limit - let Zoho Desk API validate
 						if (updateFields.tags !== undefined && typeof updateFields.tags === 'string') {
 							const tags = parseCommaSeparatedList(updateFields.tags)
-								.map(tag => removeCRLF(tag, FIELD_LENGTH_LIMITS.tag, 'Tag'));
+								.map(tag => sanitizeCRLF(tag, undefined, 'Tag'));
 							if (tags.length > 0) {
 								body.tags = tags;
 							}
