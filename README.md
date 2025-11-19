@@ -1,26 +1,28 @@
 # n8n-nodes-zoho-desk
 
-This is an n8n community node for integrating with [Zoho Desk](https://www.zoho.com/desk/) API. It allows you to create and update support tickets in your Zoho Desk account.
+Production-ready n8n community node for integrating with [Zoho Desk](https://www.zoho.com/desk/) API. Create and manage support tickets with comprehensive field support, dynamic resource loading, and automatic contact creation.
 
 ## Features
 
-- **Create Tickets**: Create new support tickets with all available fields
-- **Update Tickets**: Update existing tickets with any field modifications
-- **OAuth2 Authentication**: Secure OAuth2 authentication with support for all Zoho data centers
+- **Dynamic Department & Team Selection**: Dropdown lists automatically fetched from your Zoho Desk account
+- **Automatic Contact Creation**: Provide email/name and contacts are auto-created or matched
+- **Comprehensive Field Support**: All ticket fields including custom fields, priority, due dates, and more
+- **OAuth2 Authentication**: Secure authentication with support for all Zoho data centers
+- **Type-Safe & Validated**: Full TypeScript implementation with input validation
+- **Production-Ready**: Comprehensive error handling and user-friendly messages
 
 ## Installation
 
 ### Community Node (Recommended)
 
-1. Go to **Settings** > **Community Nodes**
-2. Search for `n8n-nodes-zoho-desk`
+1. Go to **Settings** > **Community Nodes** in n8n
+2. Search for `@enthu/n8n-nodes-zoho-desk`
 3. Click **Install**
 
 ### Manual Installation
 
 ```bash
-# In your n8n root directory
-npm install n8n-nodes-zoho-desk
+npm install @enthu/n8n-nodes-zoho-desk
 ```
 
 ## Setup
@@ -54,73 +56,63 @@ npm install n8n-nodes-zoho-desk
    - **Data Center**: Select your Zoho data center
 4. Click **Connect** and authorize the application
 
-## Node Reference
+## Operations
 
-### Operations
+### Create Ticket
 
-#### Create Ticket
-
-Creates a new support ticket in Zoho Desk.
+Creates a new support ticket with automatic contact creation/matching.
 
 **Required Fields:**
-- **Department ID**: The department to assign the ticket to
-- **Contact ID**: The contact who is raising the ticket
-- **Subject**: The ticket subject
+- **Department**: Select from dropdown (auto-populated)
+- **Subject**: Ticket subject line
+
+**Contact** (optional but recommended):
+- **Email** OR **Last Name** (at least one required if providing contact)
+- First Name, Phone, Mobile (optional)
+- If email exists, existing contact is used; otherwise new contact is created
 
 **Optional Fields:**
-- Account ID
-- Assignee ID
-- Category
-- Channel (Email, Phone, Chat, etc.)
-- Classification
-- Description
-- Due Date
-- Email
-- Language
-- Phone
-- Priority (Low, Medium, High)
-- Product ID
-- Resolution
-- Status
-- Sub Category
-- Tags (comma-separated)
-- Team ID
+- **Description**: Detailed ticket description
+- **Due Date**: Resolution deadline
+- **Priority**: Low, Medium, or High
+- **Team**: Select from department's teams (dropdown)
+- **Secondary Contacts**: Comma-separated contact IDs (e.g., `123456, 789012`)
+- **Custom Fields**: JSON object (e.g., `{"cf_modelname": "F3 2017", "cf_phone": "123456"}`)
+- Account ID, Assignee ID, Category, Channel, Classification, Email, Language, Phone, Product ID, Resolution, Status, Sub Category, Tags
 
-#### Update Ticket
+### Update Ticket
 
 Updates an existing support ticket.
 
 **Required Fields:**
-- **Ticket ID**: The ID of the ticket to update
+- **Ticket ID**: Numeric ticket ID to update
 
-**Update Fields:**
-All fields from create operation are available for update.
+**Update Fields** (all optional):
+All fields from create operation can be updated
 
-## Example Workflows
+## Usage Examples
 
-### Basic Ticket Creation
+### Create Ticket with Contact Auto-Creation
 
 ```json
 {
-  "nodes": [
-    {
-      "parameters": {
-        "resource": "ticket",
-        "operation": "create",
-        "departmentId": "123456789",
-        "contactId": "987654321",
-        "subject": "Issue with product",
-        "additionalFields": {
-          "description": "Customer is experiencing issues with the product",
-          "priority": "High",
-          "status": "Open"
-        }
-      },
-      "name": "Zoho Desk",
-      "type": "n8n-nodes-zoho-desk.zohoDesk",
-      "position": [250, 300]
-    }
-  ]
+  "departmentId": "1892000000006907",
+  "subject": "Order processing delay",
+  "contact": {
+    "email": "carol@zylker.com",
+    "lastName": "Carol",
+    "firstName": "Lucas",
+    "phone": "1 888 900 9646"
+  },
+  "description": "Customer experiencing delays in order processing",
+  "dueDate": "2025-12-01T10:00:00.000Z",
+  "priority": "High",
+  "secondaryContacts": "1892000000042038, 1892000000042042",
+  "teamId": "8920000000069071",
+  "cf": {
+    "cf_modelname": "F3 2017",
+    "cf_severitypercentage": "85.0"
+  }
 }
 ```
 
@@ -128,32 +120,71 @@ All fields from create operation are available for update.
 
 ```json
 {
-  "nodes": [
-    {
-      "parameters": {
-        "resource": "ticket",
-        "operation": "update",
-        "ticketId": "123456789",
-        "updateFields": {
-          "status": "In Progress",
-          "assigneeId": "456789123"
-        }
-      },
-      "name": "Zoho Desk",
-      "type": "n8n-nodes-zoho-desk.zohoDesk",
-      "position": [250, 300]
-    }
-  ]
+  "ticketId": "1892000000042034",
+  "priority": "High",
+  "status": "In Progress",
+  "description": "Updated with resolution details",
+  "assigneeId": "456789123"
 }
 ```
+
+## Field Details
+
+### Contact Object
+
+The contact object allows automatic contact creation or matching:
+
+- If **email** exists in Zoho Desk → Uses existing contact
+- If **email** doesn't exist → Creates new contact with provided details
+- **Validation**: Either email OR lastName must be provided
+
+### Custom Fields (cf)
+
+Pass custom fields as a JSON object:
+
+```json
+{
+  "cf": {
+    "cf_fieldname": "value",
+    "cf_priority_level": "urgent",
+    "cf_product_version": "2.0.1"
+  }
+}
+```
+
+### Secondary Contacts
+
+Provide multiple contact IDs as comma-separated values:
+
+```
+"secondaryContacts": "1892000000042038, 1892000000042042, 1892000000042056"
+```
+
+Empty values are automatically filtered.
+
+### Tags
+
+Comma-separated list of tags:
+
+```
+"tags": "urgent, customer-service, billing, escalated"
+```
+
+## Validation & Error Handling
+
+The node includes comprehensive validation:
+
+- ✅ **Contact Validation**: Ensures either email or lastName is provided
+- ✅ **Ticket ID Validation**: Validates ticket IDs are numeric
+- ✅ **JSON Validation**: Safe parsing of custom fields with detailed error messages
+- ✅ **Empty String Filtering**: Automatically filters empty values from arrays
+- ✅ **Clear Error Messages**: User-friendly error messages with actionable guidance
 
 ## API Rate Limits
 
 Zoho Desk API has the following rate limits:
-- 10 requests per second per org
+- 10 requests per second per organization
 - 5000 API calls per day
-
-The node handles rate limiting automatically and will retry requests when necessary.
 
 ## Supported Zoho Data Centers
 
@@ -164,14 +195,21 @@ The node handles rate limiting automatically and will retry requests when necess
 - zoho.com.au (Australia)
 - zoho.jp (Japan)
 
-## Error Handling
+## Technical Details
 
-The node includes comprehensive error handling:
-- Invalid credentials
-- Rate limiting
-- Invalid field values
-- Network errors
-- API errors with detailed messages
+### TypeScript Type Safety
+
+The node is fully type-safe with TypeScript interfaces:
+- `ZohoDeskDepartment` - Department structure
+- `ZohoDeskTeam` - Team structure
+- `ZohoDeskListResponse<T>` - API response wrapper
+
+### Caching
+
+n8n automatically caches dropdown options (departments, teams) after initial load. Data is refreshed when:
+- The node is reopened
+- User manually refreshes the dropdown
+- Parent parameter changes (e.g., changing department reloads teams)
 
 ## Contributing
 
@@ -181,59 +219,29 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/n8n-nodes-zoho-desk.git
+git clone https://github.com/EnthuZiastic/n8n-nodes-zoho-desk.git
 
 # Install dependencies
-pnpm install
+npm install
 
 # Build the node
-pnpm build
+npm run build
 
 # Run in development mode
-pnpm dev
-```
-
-### Testing
-
-```bash
-# Run tests
-pnpm test
-
-# Run linter
-pnpm lint
+npm run dev
 ```
 
 ### Publishing to npm
-
-Before publishing, ensure you're logged into npm with appropriate permissions:
 
 ```bash
 # Login to npm (one-time setup)
 npm login
 
-# Publish with patch version bump (0.1.3 → 0.1.4)
-npm run publish:patch
-
-# Publish with minor version bump (0.1.3 → 0.2.0)
-npm run publish:minor
-
-# Publish with major version bump (0.1.3 → 1.0.0)
-npm run publish:major
+# Publish with version bump
+npm run publish:minor  # For new features (0.2.0 → 0.3.0)
+npm run publish:patch  # For bug fixes (0.2.0 → 0.2.1)
+npm run publish:major  # For breaking changes (0.2.0 → 1.0.0)
 ```
-
-**Manual publishing process:**
-
-```bash
-# 1. Update version (choose one)
-npm run version:patch  # For bug fixes
-npm run version:minor  # For new features
-npm run version:major  # For breaking changes
-
-# 2. Publish to npm
-npm publish
-```
-
-**Note:** The `prepublishOnly` script automatically runs the build before publishing, ensuring the latest code is included.
 
 ## License
 
@@ -242,17 +250,20 @@ MIT
 ## Support
 
 If you encounter any issues or have questions:
-1. Check the [Issues](https://github.com/yourusername/n8n-nodes-zoho-desk/issues) page
+1. Check the [Issues](https://github.com/EnthuZiastic/n8n-nodes-zoho-desk/issues) page
 2. Create a new issue if your problem isn't already listed
 3. Contact the maintainer
 
 ## Changelog
 
-### 0.1.0
-- Initial release
-- Support for creating and updating tickets
-- OAuth2 authentication
-- Support for all Zoho data centers
+### 0.2.0 - Production Release
+- Dynamic department and team dropdowns
+- Automatic contact creation/matching
+- Comprehensive field support (description, dueDate, priority, secondaryContacts, custom fields)
+- Full TypeScript type safety
+- Input validation and error handling
+- JSDoc documentation throughout
+- Optimized performance
 
 ## Resources
 
