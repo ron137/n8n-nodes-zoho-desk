@@ -129,12 +129,19 @@ function addOptionalFields(
 /**
  * Validate ticket ID format
  * @param ticketId - Ticket ID to validate
- * @returns True if ticket ID is valid (numeric with proper length), false otherwise
+ * @returns True if ticket ID is valid (numeric with proper length or n8n expression), false otherwise
  */
 function isValidTicketId(ticketId: string): boolean {
 	const trimmed = ticketId.trim();
+
+	// Allow n8n expressions (e.g., {{$json.ticketId}}) - validation happens at runtime
+	if (trimmed.includes('{{') && trimmed.includes('}}')) {
+		return true;
+	}
+
 	// Zoho Desk ticket IDs are typically 16-19 digit numeric strings
-	return /^\d{16,19}$/.test(trimmed);
+	// Allow more flexible range (10+) for different Zoho configurations
+	return /^\d{10,}$/.test(trimmed);
 }
 
 /**
@@ -153,8 +160,8 @@ function addCommonTicketFields(body: IDataObject, fields: IDataObject): void {
 	if (fields.priority !== undefined) {
 		body.priority = fields.priority;
 	}
-	if (fields.secondaryContacts !== undefined) {
-		const contacts = parseCommaSeparatedList(fields.secondaryContacts as string);
+	if (fields.secondaryContacts !== undefined && typeof fields.secondaryContacts === 'string') {
+		const contacts = parseCommaSeparatedList(fields.secondaryContacts);
 		if (contacts.length > 0) {
 			body.secondaryContacts = contacts;
 		}
@@ -782,34 +789,40 @@ export class ZohoDesk implements INodeType {
 			 * @returns Array of department options for dropdown
 			 */
 			async getDepartments(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
-				const credentials = await this.getCredentials('zohoDeskOAuth2Api');
-				const orgId = credentials.orgId as string;
-				const baseUrl = (credentials.baseUrl as string | undefined) || 'https://desk.zoho.com/api/v1';
+				try {
+					const credentials = await this.getCredentials('zohoDeskOAuth2Api');
+					const orgId = credentials.orgId as string;
+					const baseUrl = (credentials.baseUrl as string | undefined) || 'https://desk.zoho.com/api/v1';
 
-				const options = {
-					method: 'GET',
-					headers: {
-						'orgId': orgId,
-					},
-					uri: `${baseUrl}/departments`,
-					json: true,
-				};
+					const options = {
+						method: 'GET',
+						headers: {
+							'orgId': orgId,
+						},
+						uri: `${baseUrl}/departments`,
+						json: true,
+					};
 
-				const response = await this.helpers.requestOAuth2.call(
-					this,
-					'zohoDeskOAuth2Api',
-					options,
-				) as ZohoDeskListResponse<ZohoDeskDepartment>;
+					const response = await this.helpers.requestOAuth2.call(
+						this,
+						'zohoDeskOAuth2Api',
+						options,
+					) as ZohoDeskListResponse<ZohoDeskDepartment>;
 
-				// Validate response structure
-				if (!response || !Array.isArray(response.data)) {
+					// Validate response structure
+					if (!response || !Array.isArray(response.data)) {
+						return [];
+					}
+
+					return response.data.map((department) => ({
+						name: department.name,
+						value: department.id,
+					}));
+				} catch (error) {
+					// Return empty array on error to prevent UI breaks
+					// n8n handles error logging internally
 					return [];
 				}
-
-				return response.data.map((department) => ({
-					name: department.name,
-					value: department.id,
-				}));
 			},
 
 			/**
@@ -820,9 +833,10 @@ export class ZohoDesk implements INodeType {
 				const credentials = await this.getCredentials('zohoDeskOAuth2Api');
 				const orgId = credentials.orgId as string;
 				const baseUrl = (credentials.baseUrl as string | undefined) || 'https://desk.zoho.com/api/v1';
-				const departmentId = this.getCurrentNodeParameter('departmentId') as string;
+				const departmentId = this.getCurrentNodeParameter('departmentId');
 
-				if (!departmentId) {
+				// Type guard: departmentId is optional in update operation
+				if (!departmentId || typeof departmentId !== 'string') {
 					return [];
 				}
 
@@ -887,39 +901,42 @@ export class ZohoDesk implements INodeType {
 						};
 
 						// Handle and validate contact object
+						// Contact is REQUIRED for ticket creation (Zoho Desk API requirement)
 						// Contact auto-creation flow:
 						// 1. If email exists in Zoho Desk → Existing contact is used
 						// 2. If email doesn't exist → New contact is created with provided details
 						// 3. Either email OR lastName must be provided (Zoho Desk requirement)
-						if (contactData && typeof contactData === 'object' && contactData.contactValues) {
-							const contactValues = contactData.contactValues as IDataObject;
-
-							// Type guard for contactValues (exclude arrays since they're technically objects)
-							if (typeof contactValues !== 'object' || contactValues === null || Array.isArray(contactValues)) {
-								throw new Error(
-									'Contact validation failed: Invalid contact data format',
-								);
-							}
-
-							// Validate that at least email or lastName is provided (Zoho Desk API requirement)
-							if (!contactValues.email && !contactValues.lastName) {
-								throw new Error(
-									'Contact validation failed: Either email or lastName must be provided for the contact',
-								);
-							}
-
-							// Build contact object with available fields
-							// Zoho Desk will automatically match by email or create new contact
-							if (contactValues.email || contactValues.lastName) {
-								const contact: IDataObject = {};
-								if (contactValues.email) contact.email = contactValues.email;
-								if (contactValues.lastName) contact.lastName = contactValues.lastName;
-								if (contactValues.firstName) contact.firstName = contactValues.firstName;
-								if (contactValues.phone) contact.phone = contactValues.phone;
-								if (contactValues.mobile) contact.mobile = contactValues.mobile;
-								body.contact = contact;
-							}
+						if (!contactData || !contactData.contactValues) {
+							throw new Error(
+								'Contact information is required for ticket creation. Please provide at least email or lastName.',
+							);
 						}
+
+						const contactValues = contactData.contactValues as IDataObject;
+
+						// Type guard for contactValues (exclude arrays since they're technically objects)
+						if (typeof contactValues !== 'object' || contactValues === null || Array.isArray(contactValues)) {
+							throw new Error(
+								'Contact validation failed: Invalid contact data format',
+							);
+						}
+
+						// Validate that at least email or lastName is provided (Zoho Desk API requirement)
+						if (!contactValues.email && !contactValues.lastName) {
+							throw new Error(
+								'Contact validation failed: Either email or lastName must be provided for the contact',
+							);
+						}
+
+						// Build contact object with available fields
+						// Zoho Desk will automatically match by email or create new contact
+						const contact: IDataObject = {};
+						if (contactValues.email) contact.email = contactValues.email;
+						if (contactValues.lastName) contact.lastName = contactValues.lastName;
+						if (contactValues.firstName) contact.firstName = contactValues.firstName;
+						if (contactValues.phone) contact.phone = contactValues.phone;
+						if (contactValues.mobile) contact.mobile = contactValues.mobile;
+						body.contact = contact;
 
 						// Add common fields (description, dueDate, priority, secondaryContacts, custom fields)
 						addCommonTicketFields(body, additionalFields);
@@ -928,8 +945,8 @@ export class ZohoDesk implements INodeType {
 						addOptionalFields(body, additionalFields, TICKET_CREATE_OPTIONAL_FIELDS);
 
 						// Handle tags with filtering of empty values
-						if (additionalFields.tags) {
-							const tags = parseCommaSeparatedList(additionalFields.tags as string);
+						if (additionalFields.tags && typeof additionalFields.tags === 'string') {
+							const tags = parseCommaSeparatedList(additionalFields.tags);
 							if (tags.length > 0) {
 								body.tags = tags;
 							}
@@ -974,8 +991,8 @@ export class ZohoDesk implements INodeType {
 						addOptionalFields(body, updateFields, TICKET_UPDATE_OPTIONAL_FIELDS);
 
 						// Handle tags with filtering of empty values
-						if (updateFields.tags !== undefined) {
-							const tags = parseCommaSeparatedList(updateFields.tags as string);
+						if (updateFields.tags !== undefined && typeof updateFields.tags === 'string') {
+							const tags = parseCommaSeparatedList(updateFields.tags);
 							if (tags.length > 0) {
 								body.tags = tags;
 							}
