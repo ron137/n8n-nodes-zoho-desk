@@ -77,6 +77,13 @@ const TICKET_UPDATE_OPTIONAL_FIELDS = [
 ] as const;
 
 /**
+ * Minimum number of digits for a valid Zoho Desk ticket ID
+ * Zoho Desk ticket IDs are typically 16-19 digits, but we allow 10+ for flexibility
+ * across different Zoho configurations and data centers
+ */
+const MIN_TICKET_ID_LENGTH = 10;
+
+/**
  * HTTP error interface for proper error type handling
  */
 interface HttpError extends Error {
@@ -133,6 +140,13 @@ function parseCustomFields(cf: unknown): IDataObject {
 
 		return parsed as IDataObject;
 	} catch (error) {
+		// Check if error is already a validation error from isPlainObject check
+		if (error instanceof Error && error.message.includes('Custom fields must be a JSON object')) {
+			// Re-throw validation errors without wrapping to preserve specific details
+			throw error;
+		}
+
+		// Wrap JSON parsing errors with helpful context
 		const errorMessage = error instanceof Error ? error.message : String(error);
 		throw new Error(
 			`Custom fields must be valid JSON. Parse error: ${errorMessage}. ` +
@@ -175,8 +189,9 @@ function isValidTicketId(ticketId: string): boolean {
 	}
 
 	// Zoho Desk ticket IDs are typically 16-19 digit numeric strings
-	// Allow more flexible range (10+) for different Zoho configurations
-	return /^\d{10,}$/.test(trimmed);
+	// Use constant for minimum length to allow flexibility across configurations
+	const pattern = new RegExp(`^\\d{${MIN_TICKET_ID_LENGTH},}$`);
+	return pattern.test(trimmed);
 }
 
 /**
@@ -858,8 +873,10 @@ export class ZohoDesk implements INodeType {
 						value: department.id,
 					}));
 				} catch (error) {
-					// Return empty array on error to prevent UI breaks
-					// n8n handles error logging internally
+					// Log error for debugging while preventing UI breaks
+					const errorMessage = error instanceof Error ? error.message : String(error);
+					console.error('Failed to load departments from Zoho Desk:', errorMessage);
+					// Return empty array to prevent UI breaks - user will see empty dropdown
 					return [];
 				}
 			},
@@ -908,8 +925,10 @@ export class ZohoDesk implements INodeType {
 						value: team.id,
 					}));
 				} catch (error) {
-					// Return empty array on error to prevent UI breaks
-					// Consistent error handling with getDepartments
+					// Log error for debugging while preventing UI breaks
+					const errorMessage = error instanceof Error ? error.message : String(error);
+					console.error('Failed to load teams from Zoho Desk:', errorMessage);
+					// Return empty array to prevent UI breaks - user will see empty dropdown
 					return [];
 				}
 			},
@@ -965,35 +984,83 @@ export class ZohoDesk implements INodeType {
 							);
 						}
 
-						// Validate that at least email or lastName is provided (Zoho Desk API requirement)
-						if (!contactValues.email && !contactValues.lastName) {
-							throw new Error(
-								'Contact validation failed: Either email or lastName must be provided for the contact. ' +
-								'See: https://desk.zoho.com/support/APIDocument#Tickets#Tickets_CreateTicket',
-							);
-						}
-
 						// Build contact object with available non-empty fields
 						// Zoho Desk will automatically match by email or create new contact
+						// Type validation ensures we only coerce strings/numbers, not complex objects
 						const contact: IDataObject = {};
-						if (contactValues.email && String(contactValues.email).trim() !== '') {
-							contact.email = contactValues.email;
-						}
-						if (contactValues.lastName && String(contactValues.lastName).trim() !== '') {
-							contact.lastName = contactValues.lastName;
-						}
-						if (contactValues.firstName && String(contactValues.firstName).trim() !== '') {
-							contact.firstName = contactValues.firstName;
-						}
-						if (contactValues.phone && String(contactValues.phone).trim() !== '') {
-							contact.phone = contactValues.phone;
-						}
-						if (contactValues.mobile && String(contactValues.mobile).trim() !== '') {
-							contact.mobile = contactValues.mobile;
+
+						if (contactValues.email) {
+							const emailType = typeof contactValues.email;
+							if (emailType !== 'string' && emailType !== 'number') {
+								throw new Error(
+									'Contact validation failed: email must be a string or number, not a complex object. ' +
+									'See: https://desk.zoho.com/support/APIDocument#Tickets#Tickets_CreateTicket',
+								);
+							}
+							const emailStr = String(contactValues.email).trim();
+							if (emailStr !== '') {
+								contact.email = contactValues.email;
+							}
 						}
 
-						// Validate that at least email or lastName has a non-empty value
-						// This catches edge cases like {email: "", lastName: "", firstName: "John"}
+						if (contactValues.lastName) {
+							const lastNameType = typeof contactValues.lastName;
+							if (lastNameType !== 'string' && lastNameType !== 'number') {
+								throw new Error(
+									'Contact validation failed: lastName must be a string or number, not a complex object. ' +
+									'See: https://desk.zoho.com/support/APIDocument#Tickets#Tickets_CreateTicket',
+								);
+							}
+							const lastNameStr = String(contactValues.lastName).trim();
+							if (lastNameStr !== '') {
+								contact.lastName = contactValues.lastName;
+							}
+						}
+
+						if (contactValues.firstName) {
+							const firstNameType = typeof contactValues.firstName;
+							if (firstNameType !== 'string' && firstNameType !== 'number') {
+								throw new Error(
+									'Contact validation failed: firstName must be a string or number, not a complex object. ' +
+									'See: https://desk.zoho.com/support/APIDocument#Tickets#Tickets_CreateTicket',
+								);
+							}
+							const firstNameStr = String(contactValues.firstName).trim();
+							if (firstNameStr !== '') {
+								contact.firstName = contactValues.firstName;
+							}
+						}
+
+						if (contactValues.phone) {
+							const phoneType = typeof contactValues.phone;
+							if (phoneType !== 'string' && phoneType !== 'number') {
+								throw new Error(
+									'Contact validation failed: phone must be a string or number, not a complex object. ' +
+									'See: https://desk.zoho.com/support/APIDocument#Tickets#Tickets_CreateTicket',
+								);
+							}
+							const phoneStr = String(contactValues.phone).trim();
+							if (phoneStr !== '') {
+								contact.phone = contactValues.phone;
+							}
+						}
+
+						if (contactValues.mobile) {
+							const mobileType = typeof contactValues.mobile;
+							if (mobileType !== 'string' && mobileType !== 'number') {
+								throw new Error(
+									'Contact validation failed: mobile must be a string or number, not a complex object. ' +
+									'See: https://desk.zoho.com/support/APIDocument#Tickets#Tickets_CreateTicket',
+								);
+							}
+							const mobileStr = String(contactValues.mobile).trim();
+							if (mobileStr !== '') {
+								contact.mobile = contactValues.mobile;
+							}
+						}
+
+						// Single consolidated validation: ensure at least email or lastName has a non-empty value
+						// This catches all edge cases in one place
 						if (!contact.email && !contact.lastName) {
 							throw new Error(
 								'Contact validation failed: Either email or lastName must have a non-empty value. ' +
