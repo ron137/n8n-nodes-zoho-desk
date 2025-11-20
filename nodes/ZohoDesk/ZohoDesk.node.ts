@@ -37,6 +37,15 @@ interface ZohoDeskListResponse<T> {
 }
 
 /**
+ * Zoho Desk API teams response wrapper
+ * Note: Teams endpoint uses 'teams' property instead of 'data'
+ */
+interface ZohoDeskTeamsResponse {
+  /** Array of teams returned by the teams API endpoint */
+  teams: ZohoDeskTeam[];
+}
+
+/**
  * Optional fields for ticket create operation
  * Note: Some fields like 'secondaryContacts', 'cf', and 'tags'
  * are handled separately with custom parsing logic (see addCommonTicketFields function)
@@ -1193,6 +1202,7 @@ export class ZohoDesk implements INodeType {
           );
 
           // Runtime validation of API response structure with detailed error reporting
+          // Note: Teams endpoint uses 'teams' property instead of 'data'
           if (!response || typeof response !== 'object') {
             throw new Error(
               `Invalid API response structure from Zoho Desk. Expected an object, received: ${typeof response}. ` +
@@ -1200,24 +1210,24 @@ export class ZohoDesk implements INodeType {
             );
           }
 
-          if (!('data' in response)) {
+          if (!('teams' in response)) {
             throw new Error(
-              `Invalid API response structure from Zoho Desk. Missing 'data' property. ` +
+              `Invalid API response structure from Zoho Desk. Missing 'teams' property. ` +
                 `Response keys: ${Object.keys(response).join(', ')}. ` +
                 `Response: ${JSON.stringify(response)}`,
             );
           }
 
-          if (!Array.isArray(response.data)) {
+          if (!Array.isArray(response.teams)) {
             throw new Error(
-              `Invalid API response structure from Zoho Desk. Expected 'data' to be an array, received: ${typeof response.data}. ` +
+              `Invalid API response structure from Zoho Desk. Expected 'teams' to be an array, received: ${typeof response.teams}. ` +
                 `Response: ${JSON.stringify(response)}`,
             );
           }
 
-          const typedResponse = response as ZohoDeskListResponse<ZohoDeskTeam>;
+          const typedResponse = response as ZohoDeskTeamsResponse;
 
-          return typedResponse.data.map((team) => ({
+          return typedResponse.teams.map((team) => ({
             name: team.name,
             value: team.id,
           }));
