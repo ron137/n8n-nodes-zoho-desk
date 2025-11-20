@@ -978,7 +978,25 @@ export class ZohoDesk implements INodeType {
 					{
 						displayName: 'Classification',
 						name: 'classification',
-						type: 'string',
+						type: 'options',
+						options: [
+							{
+								name: 'Question',
+								value: 'Question',
+							},
+							{
+								name: 'Problem',
+								value: 'Problem',
+							},
+							{
+								name: 'Request',
+								value: 'Request',
+							},
+							{
+								name: 'Others',
+								value: 'Others',
+							},
+						],
 						default: '',
 						description: 'Classification of the ticket',
 					},
