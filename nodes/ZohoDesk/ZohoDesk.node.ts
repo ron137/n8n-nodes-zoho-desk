@@ -38,15 +38,15 @@ interface ZohoDeskListResponse<T> {
 
 /**
  * Optional fields for ticket create operation
- * Note: Some fields like 'description', 'dueDate', 'priority', 'secondaryContacts', 'cf', and 'tags'
+ * Note: Some fields like 'description', 'secondaryContacts', 'cf', and 'tags'
  * are handled separately with custom parsing logic (see addCommonTicketFields function)
+ * Note: 'priority', 'classification', and 'dueDate' are primary fields for create operation
  */
 const TICKET_CREATE_OPTIONAL_FIELDS = [
 	'accountId',
 	'assigneeId',
 	'category',
 	'channel',
-	'classification',
 	'email',
 	'language',
 	'phone',
@@ -395,7 +395,8 @@ function addContactField(
 }
 
 /**
- * Add common ticket fields (description, dueDate, priority, secondaryContacts, custom fields)
+ * Add common ticket fields (description, secondaryContacts, custom fields)
+ * For update operation only: also handles dueDate and priority
  * This eliminates code duplication between create and update operations
  * @param body - Target object to add fields to
  * @param fields - Source object containing field values
@@ -578,6 +579,77 @@ export class ZohoDesk implements INodeType {
 				],
 			},
 			{
+				displayName: 'Priority',
+				name: 'priority',
+				type: 'options',
+				displayOptions: {
+					show: {
+						resource: ['ticket'],
+						operation: ['create'],
+					},
+				},
+				options: [
+					{
+						name: 'Low',
+						value: 'Low',
+					},
+					{
+						name: 'Medium',
+						value: 'Medium',
+					},
+					{
+						name: 'High',
+						value: 'High',
+					},
+				],
+				default: 'Medium',
+				description: 'Priority of the ticket',
+			},
+			{
+				displayName: 'Classification',
+				name: 'classification',
+				type: 'options',
+				displayOptions: {
+					show: {
+						resource: ['ticket'],
+						operation: ['create'],
+					},
+				},
+				options: [
+					{
+						name: 'Question',
+						value: 'Question',
+					},
+					{
+						name: 'Problem',
+						value: 'Problem',
+					},
+					{
+						name: 'Request',
+						value: 'Request',
+					},
+					{
+						name: 'Others',
+						value: 'Others',
+					},
+				],
+				default: 'Question',
+				description: 'Classification of the ticket',
+			},
+			{
+				displayName: 'Due Date',
+				name: 'dueDate',
+				type: 'dateTime',
+				displayOptions: {
+					show: {
+						resource: ['ticket'],
+						operation: ['create'],
+					},
+				},
+				default: '',
+				description: 'The due date for resolving the ticket',
+			},
+			{
 				displayName: 'Additional Fields',
 				name: 'additionalFields',
 				type: 'collection',
@@ -599,34 +671,6 @@ export class ZohoDesk implements INodeType {
 						},
 						default: '',
 						description: 'Description of the ticket',
-					},
-					{
-						displayName: 'Due Date',
-						name: 'dueDate',
-						type: 'dateTime',
-						default: '',
-						description: 'The due date for resolving the ticket',
-					},
-					{
-						displayName: 'Priority',
-						name: 'priority',
-						type: 'options',
-						options: [
-							{
-								name: 'Low',
-								value: 'Low',
-							},
-							{
-								name: 'Medium',
-								value: 'Medium',
-							},
-							{
-								name: 'High',
-								value: 'High',
-							},
-						],
-						default: 'Medium',
-						description: 'Priority of the ticket',
 					},
 					{
 						displayName: 'Secondary Contacts',
@@ -716,13 +760,6 @@ export class ZohoDesk implements INodeType {
 						],
 						default: 'EMAIL',
 						description: 'The channel through which the ticket was created',
-					},
-					{
-						displayName: 'Classification',
-						name: 'classification',
-						type: 'string',
-						default: '',
-						description: 'Classification of the ticket',
 					},
 					{
 						displayName: 'Email',
@@ -1160,6 +1197,9 @@ export class ZohoDesk implements INodeType {
 						const departmentId = this.getNodeParameter('departmentId', i) as string;
 						const rawSubject = this.getNodeParameter('subject', i) as string;
 						const contactData = this.getNodeParameter('contact', i) as IDataObject;
+						const priority = this.getNodeParameter('priority', i) as string;
+						const classification = this.getNodeParameter('classification', i) as string;
+						const dueDate = this.getNodeParameter('dueDate', i) as string;
 						const additionalFields = this.getNodeParameter('additionalFields', i) as IDataObject;
 
 						// Validate length for subject (XSS protection handled by Zoho Desk API)
@@ -1169,7 +1209,14 @@ export class ZohoDesk implements INodeType {
 						const body: IDataObject = {
 							departmentId,
 							subject,
+							priority,
+							classification,
 						};
+
+						// Add dueDate if provided
+						if (dueDate) {
+							body.dueDate = dueDate;
+						}
 
 						// Handle and validate contact object (OPTIONAL)
 						// Contact field is optional in UI (required: false) but if provided, must be valid
