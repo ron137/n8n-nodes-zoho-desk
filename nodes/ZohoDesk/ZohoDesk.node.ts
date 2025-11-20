@@ -396,12 +396,14 @@ function addContactField(
 
 /**
  * Add common ticket fields (description, secondaryContacts, custom fields)
- * For update operation only: also handles dueDate and priority
  * This eliminates code duplication between create and update operations
  * @param body - Target object to add fields to
  * @param fields - Source object containing field values
+ * @param includePriorityAndDueDate - Whether to include priority and dueDate fields (true for update, false for create)
+ *                                     For create operation: priority and dueDate are primary fields, not in additionalFields
+ *                                     For update operation: priority and dueDate are optional fields in updateFields
  */
-function addCommonTicketFields(body: IDataObject, fields: IDataObject): void {
+function addCommonTicketFields(body: IDataObject, fields: IDataObject, includePriorityAndDueDate = true): void {
 	if (fields.description !== undefined) {
 		// Validate length for description (XSS protection handled by Zoho Desk API)
 		// No length limit - let Zoho Desk API validate
@@ -409,12 +411,18 @@ function addCommonTicketFields(body: IDataObject, fields: IDataObject): void {
 			? validateFieldLength(fields.description, undefined, 'Description')
 			: fields.description;
 	}
-	if (fields.dueDate !== undefined) {
-		body.dueDate = fields.dueDate;
+
+	// Only include dueDate and priority for update operation
+	// For create operation, these are primary fields set separately
+	if (includePriorityAndDueDate) {
+		if (fields.dueDate !== undefined) {
+			body.dueDate = fields.dueDate;
+		}
+		if (fields.priority !== undefined) {
+			body.priority = fields.priority;
+		}
 	}
-	if (fields.priority !== undefined) {
-		body.priority = fields.priority;
-	}
+
 	if (fields.secondaryContacts !== undefined && typeof fields.secondaryContacts === 'string') {
 		const contacts = parseCommaSeparatedList(fields.secondaryContacts);
 		if (contacts.length > 0) {
@@ -1269,8 +1277,9 @@ export class ZohoDesk implements INodeType {
 							// If all values are empty, skip contact entirely (no error thrown)
 						}
 
-						// Add common fields (description, dueDate, priority, secondaryContacts, custom fields)
-						addCommonTicketFields(body, additionalFields);
+						// Add common fields (description, secondaryContacts, custom fields)
+						// Note: priority and dueDate are already set as primary fields above
+						addCommonTicketFields(body, additionalFields, false);
 
 						// Add other additional fields
 						addOptionalFields(body, additionalFields, TICKET_CREATE_OPTIONAL_FIELDS);
