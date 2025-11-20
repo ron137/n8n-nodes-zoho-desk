@@ -56,7 +56,7 @@ export class ZohoDeskOAuth2Api implements ICredentialType {
 			type: 'string',
 			default: '',
 			required: true,
-			description: 'Your Zoho Desk Organization ID. You can find this in Setup > Developer Space > API',
+			description: 'Your Zoho Desk Organization ID. You can find this in Setup > Developer Space > API.',
 		},
 		{
 			displayName: 'Authorization URL',

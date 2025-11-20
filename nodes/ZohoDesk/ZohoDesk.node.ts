@@ -496,7 +496,7 @@ export class ZohoDesk implements INodeType {
 			},
 			// Create Operation Fields
 			{
-				displayName: 'Department',
+				displayName: 'Department Name or ID',
 				name: 'departmentId',
 				type: 'options',
 				typeOptions: {
@@ -510,7 +510,7 @@ export class ZohoDesk implements INodeType {
 					},
 				},
 				default: '',
-				description: 'The department to which the ticket belongs',
+				description: 'The department to which the ticket belongs. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 			},
 			{
 				displayName: 'Subject',
@@ -533,7 +533,6 @@ export class ZohoDesk implements INodeType {
 				typeOptions: {
 					multipleValues: false,
 				},
-				required: false,
 				displayOptions: {
 					show: {
 						resource: ['ticket'],
@@ -548,39 +547,40 @@ export class ZohoDesk implements INodeType {
 						displayName: 'Contact Details',
 						values: [
 							{
-								displayName: 'Email',
-								name: 'email',
-								type: 'string',
-								default: '',
-								description: 'Email address of the contact (required if lastName is not provided)',
+						displayName: 'Email',
+						name: 'email',
+						type: 'string',
+						placeholder: 'name@email.com',
+						default: '',
+						description: 'Email address of the contact (required if lastName is not provided)',
 							},
 							{
-								displayName: 'Last Name',
-								name: 'lastName',
-								type: 'string',
-								default: '',
-								description: 'Last name of the contact (required if email is not provided)',
+						displayName: 'First Name',
+						name: 'firstName',
+						type: 'string',
+						default: '',
+						description: 'First name of the contact',
 							},
 							{
-								displayName: 'First Name',
-								name: 'firstName',
-								type: 'string',
-								default: '',
-								description: 'First name of the contact',
+						displayName: 'Last Name',
+						name: 'lastName',
+						type: 'string',
+						default: '',
+						description: 'Last name of the contact (required if email is not provided)',
 							},
 							{
-								displayName: 'Phone',
-								name: 'phone',
-								type: 'string',
-								default: '',
-								description: 'Phone number of the contact',
+						displayName: 'Mobile',
+						name: 'mobile',
+						type: 'string',
+						default: '',
+						description: 'Mobile number of the contact',
 							},
 							{
-								displayName: 'Mobile',
-								name: 'mobile',
-								type: 'string',
-								default: '',
-								description: 'Mobile number of the contact',
+						displayName: 'Phone',
+						name: 'phone',
+						type: 'string',
+						default: '',
+						description: 'Phone number of the contact',
 							},
 						],
 					},
@@ -689,7 +689,7 @@ export class ZohoDesk implements INodeType {
 						placeholder: '1892000000042038, 1892000000042042',
 					},
 					{
-						displayName: 'Team',
+						displayName: 'Team Name or ID',
 						name: 'teamId',
 						type: 'options',
 						typeOptions: {
@@ -697,7 +697,7 @@ export class ZohoDesk implements INodeType {
 							loadOptionsDependsOn: ['departmentId'],
 						},
 						default: '',
-						description: 'The team assigned to the ticket. Note: Teams will only load if Department is selected first.',
+						description: 'The team assigned to the ticket. Note: Teams will only load if Department is selected first. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 					},
 					{
 						displayName: 'Custom Fields',
@@ -773,6 +773,7 @@ export class ZohoDesk implements INodeType {
 						displayName: 'Email',
 						name: 'email',
 						type: 'string',
+						placeholder: 'name@email.com',
 						default: '',
 						description: 'Email address of the contact',
 					},
@@ -975,19 +976,20 @@ export class ZohoDesk implements INodeType {
 						description: 'The ID of the contact who raised the ticket',
 					},
 					{
-						displayName: 'Department',
+						displayName: 'Department Name or ID',
 						name: 'departmentId',
 						type: 'options',
 						typeOptions: {
 							loadOptionsMethod: 'getDepartments',
 						},
 						default: '',
-						description: 'The department to which the ticket belongs',
+						description: 'The department to which the ticket belongs. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 					},
 					{
 						displayName: 'Email',
 						name: 'email',
 						type: 'string',
+						placeholder: 'name@email.com',
 						default: '',
 						description: 'Email address of the contact',
 					},
@@ -1052,7 +1054,7 @@ export class ZohoDesk implements INodeType {
 						placeholder: 'urgent, customer-service, billing',
 					},
 					{
-						displayName: 'Team',
+						displayName: 'Team Name or ID',
 						name: 'teamId',
 						type: 'options',
 						typeOptions: {
@@ -1060,7 +1062,7 @@ export class ZohoDesk implements INodeType {
 							loadOptionsDependsOn: ['departmentId'],
 						},
 						default: '',
-						description: 'The team assigned to the ticket. Note: Teams will only load if Department is selected first.',
+						description: 'The team assigned to the ticket. Note: Teams will only load if Department is selected first. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 					},
 				],
 			},
