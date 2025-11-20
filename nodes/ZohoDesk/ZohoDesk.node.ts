@@ -874,7 +874,7 @@ export class ZohoDesk implements INodeType {
 						name: 'dueDate',
 						type: 'dateTime',
 						default: '',
-						description: 'The due date for resolving the ticket',
+						description: 'The due date for resolving the ticket (leave empty to keep current due date)',
 					},
 					{
 						displayName: 'Priority',
@@ -894,8 +894,8 @@ export class ZohoDesk implements INodeType {
 								value: 'High',
 							},
 						],
-						default: 'Medium',
-						description: 'Priority of the ticket',
+						default: '',
+						description: 'Priority of the ticket (leave empty to keep current priority)',
 					},
 					{
 						displayName: 'Secondary Contacts',
@@ -998,7 +998,7 @@ export class ZohoDesk implements INodeType {
 							},
 						],
 						default: '',
-						description: 'Classification of the ticket',
+						description: 'Classification of the ticket (leave empty to keep current classification)',
 					},
 					{
 						displayName: 'Contact ID',
