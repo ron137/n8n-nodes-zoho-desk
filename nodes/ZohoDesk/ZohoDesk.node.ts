@@ -553,29 +553,29 @@ export class ZohoDesk implements INodeType {
 							placeholder: 'name@email.com',
 							default: '',
 							description: 'Email address of the contact (required if lastName is not provided)',
-								},
-								{
+							},
+							{
 							displayName: 'First Name',
 							name: 'firstName',
 							type: 'string',
 							default: '',
 							description: 'First name of the contact',
-								},
-								{
+							},
+							{
 							displayName: 'Last Name',
 							name: 'lastName',
 							type: 'string',
 							default: '',
 							description: 'Last name of the contact (required if email is not provided)',
-								},
-								{
+							},
+							{
 							displayName: 'Mobile',
 							name: 'mobile',
 							type: 'string',
 							default: '',
 							description: 'Mobile number of the contact',
-								},
-								{
+							},
+							{
 							displayName: 'Phone',
 							name: 'phone',
 							type: 'string',
