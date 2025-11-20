@@ -40,8 +40,7 @@ interface ZohoDeskListResponse<T> {
  * Optional fields for ticket create operation
  * Note: Some fields like 'secondaryContacts', 'cf', and 'tags'
  * are handled separately with custom parsing logic (see addCommonTicketFields function)
- * Note: 'priority', 'classification', 'dueDate', 'description', and 'tags' are primary fields for create operation
- * Note: 'teamId' is not included in create operation (only in update)
+ * Note: 'priority', 'classification', 'dueDate', 'description', 'tags', and 'teamId' are primary fields for create operation
  */
 const TICKET_CREATE_OPTIONAL_FIELDS = [
   'accountId',
@@ -520,6 +519,24 @@ export class ZohoDesk implements INodeType {
         default: '',
         description:
           'The department to which the ticket belongs. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
+      },
+      {
+        displayName: 'Team Name or ID',
+        name: 'teamId',
+        type: 'options',
+        typeOptions: {
+          loadOptionsMethod: 'getTeams',
+          loadOptionsDependsOn: ['departmentId'],
+        },
+        displayOptions: {
+          show: {
+            resource: ['ticket'],
+            operation: ['create'],
+          },
+        },
+        default: '',
+        description:
+          'The team assigned to the ticket. Note: Teams will only load if Department is selected first. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
       },
       {
         displayName: 'Subject',
@@ -1222,6 +1239,7 @@ export class ZohoDesk implements INodeType {
           if (operation === 'create') {
             // Create ticket
             const departmentId = this.getNodeParameter('departmentId', i) as string;
+            const teamId = this.getNodeParameter('teamId', i) as string;
             const rawSubject = this.getNodeParameter('subject', i) as string;
             const contactData = this.getNodeParameter('contact', i) as IDataObject;
             const priority = this.getNodeParameter('priority', i) as string;
@@ -1241,6 +1259,11 @@ export class ZohoDesk implements INodeType {
               priority,
               classification,
             };
+
+            // Add teamId if provided (optional field)
+            if (teamId) {
+              body.teamId = teamId;
+            }
 
             // Add dueDate if provided
             if (dueDate) {
