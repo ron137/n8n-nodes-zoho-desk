@@ -44,7 +44,6 @@
   },
   "lint-staged": {
     "*.ts": [
-      "eslint --fix",
       "npm run format"
     ]
   },

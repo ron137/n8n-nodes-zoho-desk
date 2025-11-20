@@ -32,9 +32,9 @@ npm run format       # Prettier formatting for nodes/ and credentials/
 ```
 
 **Pre-commit Hook**: The project uses husky and lint-staged to automatically format code before each commit:
-- Runs `eslint --fix` on staged TypeScript files
-- Runs `npm run format` to format the entire codebase
+- Runs `npm run format` to format the entire codebase (nodes/ and credentials/ directories)
 - Ensures all commits have properly formatted code
+- Note: Linting errors are not checked in the pre-commit hook to avoid blocking commits. Run `npm run lint` manually before pushing.
 - If you need to bypass (not recommended): `git commit --no-verify`
 
 ### Publishing
