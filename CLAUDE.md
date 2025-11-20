@@ -6,7 +6,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is an n8n community node package that integrates with the Zoho Desk API. It provides ticket creation and update operations through OAuth2 authentication.
 
-## Development Commands
+## Development Setup
+
+**First-time setup** (after cloning the repository):
+```bash
+npm install  # Installs dependencies and sets up git hooks via husky
+```
+
+This will:
+- Install all npm dependencies
+- Initialize husky git hooks (creates `.husky/_` directory)
+- Set up the pre-commit hook for automatic code formatting
 
 ### Build and Development
 ```bash
@@ -20,6 +30,12 @@ npm run prepublishOnly # Pre-publish build (runs automatically)
 npm run lint         # ESLint check on nodes/ and credentials/
 npm run format       # Prettier formatting for nodes/ and credentials/
 ```
+
+**Pre-commit Hook**: The project uses husky and lint-staged to automatically format code before each commit:
+- Runs `eslint --fix` on staged TypeScript files
+- Runs `npm run format` to format the entire codebase
+- Ensures all commits have properly formatted code
+- If you need to bypass (not recommended): `git commit --no-verify`
 
 ### Publishing
 ```bash
