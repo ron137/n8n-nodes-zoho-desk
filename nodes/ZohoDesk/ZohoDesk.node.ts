@@ -353,15 +353,15 @@ function validateFieldLength(value: string, maxLength?: number, fieldName?: stri
 }
 
 /**
- * Convert ISO 8601 date string to milliseconds timestamp for Zoho Desk API
+ * Validate and normalize ISO 8601 date string for Zoho Desk API
  *
- * @param dateString - ISO 8601 formatted date string (e.g., "2025-11-20T10:30:00.000Z")
+ * @param dateString - ISO 8601 formatted date string (e.g., "2025-11-20T10:30:00" or "2025-11-20T10:30:00.000Z")
  * @param fieldName - Field name for error messages (e.g., "Due Date")
  * @param docsUrl - URL to Zoho Desk API documentation for error messages
- * @returns Milliseconds timestamp (e.g., 1732098600000)
+ * @returns ISO 8601 string with milliseconds and timezone (e.g., "2025-11-20T10:30:00.000Z")
  * @throws Error if dateString is invalid or cannot be parsed
  */
-function convertDateToTimestamp(dateString: string, fieldName: string, docsUrl: string): number {
+function convertDateToTimestamp(dateString: string, fieldName: string, docsUrl: string): string {
   // Validate that date string is not empty or whitespace-only
   if (!dateString || dateString.trim() === '') {
     throw new Error(
@@ -371,9 +371,9 @@ function convertDateToTimestamp(dateString: string, fieldName: string, docsUrl: 
     );
   }
 
-  // Convert to timestamp and validate
-  const timestamp = new Date(dateString).getTime();
-  if (isNaN(timestamp)) {
+  // Validate date string format
+  const date = new Date(dateString);
+  if (isNaN(date.getTime())) {
     throw new Error(
       `Invalid ${fieldName} format: "${dateString}". Expected ISO 8601 format (e.g., "2025-11-20T10:30:00.000Z"). ` +
         'See: ' +
@@ -381,7 +381,9 @@ function convertDateToTimestamp(dateString: string, fieldName: string, docsUrl: 
     );
   }
 
-  return timestamp;
+  // Return ISO 8601 string format (Zoho Desk API expects ISO 8601 string, not milliseconds timestamp)
+  // If the input doesn't have milliseconds or timezone, add them
+  return date.toISOString();
 }
 
 /**
@@ -466,7 +468,7 @@ function addCommonTicketFields(
     if (fields.dueDate !== undefined) {
       const dueDateValue = fields.dueDate as string;
       if (dueDateValue && dueDateValue.trim() !== '') {
-        // Convert ISO 8601 string to milliseconds timestamp for Zoho Desk API
+        // Validate and normalize ISO 8601 string for Zoho Desk API
         body.dueDate = convertDateToTimestamp(
           dueDateValue,
           'Due Date',
@@ -1301,9 +1303,9 @@ export class ZohoDesk implements INodeType {
               body.teamId = teamId;
             }
 
-            // Add dueDate if provided - convert ISO 8601 string to milliseconds timestamp
+            // Add dueDate if provided - validate and normalize ISO 8601 string
             if (dueDate && dueDate.trim() !== '') {
-              // n8n dateTime field returns ISO 8601 string, Zoho Desk API expects milliseconds timestamp
+              // n8n dateTime field returns ISO 8601 string, Zoho Desk API expects ISO 8601 with milliseconds and timezone
               body.dueDate = convertDateToTimestamp(
                 dueDate,
                 'Due Date',
