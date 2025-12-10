@@ -1,5 +1,5 @@
 {
-  "name": "@ron137/n8n-nodes-zoho-desk",
+  "name": "n8n-nodes-zoho-desk-extended",
   "version": "1.0.0",
   "description": "n8n community node for Zoho Desk API integration - Tickets, Contacts, and Accounts management",
   "keywords": [
