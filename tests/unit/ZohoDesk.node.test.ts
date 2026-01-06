@@ -323,12 +323,13 @@ describe('ZohoDesk Node', () => {
     });
 
     describe('list', () => {
-      it('should list tickets with pagination', async () => {
+      it('should list active tickets by default', async () => {
         const mockTickets = [createMockTicket({ id: '1' }), createMockTicket({ id: '2' })];
         const mockFunctions = createMockExecuteFunctions({
           nodeParameters: {
             resource: 'ticket',
             operation: 'list',
+            ticketType: 'active',
             returnAll: false,
             limit: 10,
             filters: {},
@@ -352,12 +353,70 @@ describe('ZohoDesk Node', () => {
         expect(result[0]).toHaveLength(2);
       });
 
+      it('should list archived tickets when ticketType is archived', async () => {
+        const mockTickets = [createMockTicket({ id: '1' }), createMockTicket({ id: '2' })];
+        const mockFunctions = createMockExecuteFunctions({
+          nodeParameters: {
+            resource: 'ticket',
+            operation: 'list',
+            ticketType: 'archived',
+            returnAll: false,
+            limit: 10,
+            filters: {},
+          },
+        });
+
+        (mockFunctions.helpers.requestOAuth2.call as jest.Mock).mockResolvedValue(
+          createMockListResponse(mockTickets),
+        );
+
+        const result = await node.execute.call(mockFunctions);
+
+        expect(mockFunctions.helpers.requestOAuth2.call).toHaveBeenCalledWith(
+          mockFunctions,
+          'zohoDeskOAuth2Api',
+          expect.objectContaining({
+            method: 'GET',
+            uri: expect.stringContaining('/archivedTickets'),
+          }),
+        );
+        expect(result[0]).toHaveLength(2);
+      });
+
+      it('should list both active and archived tickets when ticketType is all', async () => {
+        const activeTickets = [createMockTicket({ id: '1' })];
+        const archivedTickets = [createMockTicket({ id: '2' })];
+        const mockFunctions = createMockExecuteFunctions({
+          nodeParameters: {
+            resource: 'ticket',
+            operation: 'list',
+            ticketType: 'all',
+            returnAll: false,
+            limit: 10,
+            filters: {},
+          },
+        });
+
+        (mockFunctions.helpers.requestOAuth2.call as jest.Mock)
+          .mockResolvedValueOnce(createMockListResponse(activeTickets))
+          .mockResolvedValueOnce(createMockListResponse(archivedTickets));
+
+        const result = await node.execute.call(mockFunctions);
+
+        expect(mockFunctions.helpers.requestOAuth2.call).toHaveBeenCalledTimes(2);
+        expect(result[0]).toHaveLength(2);
+        // Check _source field is added
+        expect(result[0][0].json._source).toBe('active');
+        expect(result[0][1].json._source).toBe('archived');
+      });
+
       it('should fetch all tickets when returnAll is true', async () => {
         const page1 = [createMockTicket({ id: '1' }), createMockTicket({ id: '2' })];
         const mockFunctions = createMockExecuteFunctions({
           nodeParameters: {
             resource: 'ticket',
             operation: 'list',
+            ticketType: 'active',
             returnAll: true,
             filters: {},
           },

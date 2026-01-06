@@ -1166,6 +1166,36 @@ export class ZohoDesk implements INodeType {
       },
       // ==================== TICKET: LIST ====================
       {
+        displayName: 'Ticket Type',
+        name: 'ticketType',
+        type: 'options',
+        options: [
+          {
+            name: 'Active Only',
+            value: 'active',
+            description: 'Only retrieve active (non-archived) tickets',
+          },
+          {
+            name: 'Archived Only',
+            value: 'archived',
+            description: 'Only retrieve archived tickets',
+          },
+          {
+            name: 'All (Active + Archived)',
+            value: 'all',
+            description: 'Retrieve both active and archived tickets',
+          },
+        ],
+        displayOptions: {
+          show: {
+            resource: ['ticket'],
+            operation: ['list'],
+          },
+        },
+        default: 'active',
+        description: 'Which type of tickets to retrieve',
+      },
+      {
         displayName: 'Return All',
         name: 'returnAll',
         type: 'boolean',
@@ -2410,6 +2440,7 @@ export class ZohoDesk implements INodeType {
           }
 
           if (operation === 'list') {
+            const ticketType = this.getNodeParameter('ticketType', i) as string;
             const returnAll = this.getNodeParameter('returnAll', i) as boolean;
             const filters = this.getNodeParameter('filters', i) as IDataObject;
 
@@ -2419,43 +2450,82 @@ export class ZohoDesk implements INodeType {
             if (filters.assigneeId) queryParams.assigneeId = filters.assigneeId;
             if (filters.status) queryParams.status = filters.status;
 
+            // Determine which endpoints to call based on ticketType
+            const endpoints: string[] = [];
+            if (ticketType === 'active' || ticketType === 'all') {
+              endpoints.push('/tickets');
+            }
+            if (ticketType === 'archived' || ticketType === 'all') {
+              endpoints.push('/archivedTickets');
+            }
+
             if (returnAll) {
-              const items = await getAllPaginatedItems(
-                this,
-                baseUrl,
-                '/tickets',
-                orgId,
-                100,
-                'data',
-                queryParams,
-              );
-              for (const item of items) {
-                returnData.push({
-                  json: item,
-                  pairedItem: { item: i },
-                });
+              // Fetch all tickets from each endpoint
+              for (const endpoint of endpoints) {
+                const items = await getAllPaginatedItems(
+                  this,
+                  baseUrl,
+                  endpoint,
+                  orgId,
+                  100,
+                  'data',
+                  queryParams,
+                );
+                for (const item of items) {
+                  // Add source indicator for 'all' type
+                  const ticketData =
+                    ticketType === 'all'
+                      ? {
+                          ...item,
+                          _source: endpoint === '/archivedTickets' ? 'archived' : 'active',
+                        }
+                      : item;
+                  returnData.push({
+                    json: ticketData,
+                    pairedItem: { item: i },
+                  });
+                }
               }
             } else {
               const limit = this.getNodeParameter('limit', i) as number;
-              const options = {
-                method: 'GET',
-                headers: { orgId },
-                uri: `${baseUrl}/tickets`,
-                qs: { from: 1, limit, ...queryParams },
-                json: true,
-              };
+              // For 'all' type with limit, split limit between endpoints
+              const limitPerEndpoint =
+                ticketType === 'all' ? Math.ceil(limit / endpoints.length) : limit;
 
-              const response = await this.helpers.requestOAuth2.call(
-                this,
-                'zohoDeskOAuth2Api',
-                options,
-              );
+              for (const endpoint of endpoints) {
+                const options = {
+                  method: 'GET',
+                  headers: { orgId },
+                  uri: `${baseUrl}${endpoint}`,
+                  qs: { from: 1, limit: limitPerEndpoint, ...queryParams },
+                  json: true,
+                };
 
-              for (const ticket of (response.data as IDataObject[]) || []) {
-                returnData.push({
-                  json: ticket,
-                  pairedItem: { item: i },
-                });
+                const response = await this.helpers.requestOAuth2.call(
+                  this,
+                  'zohoDeskOAuth2Api',
+                  options,
+                );
+
+                for (const ticket of (response.data as IDataObject[]) || []) {
+                  // Add source indicator for 'all' type
+                  const ticketData =
+                    ticketType === 'all'
+                      ? {
+                          ...ticket,
+                          _source: endpoint === '/archivedTickets' ? 'archived' : 'active',
+                        }
+                      : ticket;
+                  returnData.push({
+                    json: ticketData,
+                    pairedItem: { item: i },
+                  });
+                }
+              }
+
+              // If 'all' type, trim to requested limit
+              if (ticketType === 'all' && returnData.length > limit) {
+                returnData.length = limit;
               }
             }
           }
