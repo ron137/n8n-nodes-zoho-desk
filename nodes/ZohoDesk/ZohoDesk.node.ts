@@ -1250,7 +1250,8 @@ export class ZohoDesk implements INodeType {
             name: 'departmentId',
             type: 'string',
             default: '',
-            description: 'Filter by department ID',
+            description:
+              'Filter by department ID. REQUIRED when Ticket Type is "Archived Only" or "All".',
           },
           {
             displayName: 'Status',
@@ -2456,7 +2457,14 @@ export class ZohoDesk implements INodeType {
               endpoints.push('/tickets');
             }
             if (ticketType === 'archived' || ticketType === 'all') {
-              endpoints.push('/archivedTickets');
+              // Archived tickets endpoint requires departmentId
+              if (!queryParams.departmentId) {
+                throw new NodeOperationError(
+                  this.getNode(),
+                  'Department ID is required when listing archived tickets. Please select a department in the Filters section.',
+                );
+              }
+              endpoints.push('/tickets/archivedTickets');
             }
 
             if (returnAll) {
@@ -2477,7 +2485,7 @@ export class ZohoDesk implements INodeType {
                     ticketType === 'all'
                       ? {
                           ...item,
-                          _source: endpoint === '/archivedTickets' ? 'archived' : 'active',
+                          _source: endpoint === '/tickets/archivedTickets' ? 'archived' : 'active',
                         }
                       : item;
                   returnData.push({
@@ -2513,7 +2521,7 @@ export class ZohoDesk implements INodeType {
                     ticketType === 'all'
                       ? {
                           ...ticket,
-                          _source: endpoint === '/archivedTickets' ? 'archived' : 'active',
+                          _source: endpoint === '/tickets/archivedTickets' ? 'archived' : 'active',
                         }
                       : ticket;
                   returnData.push({

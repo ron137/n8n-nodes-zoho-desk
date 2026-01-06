@@ -362,7 +362,7 @@ describe('ZohoDesk Node', () => {
             ticketType: 'archived',
             returnAll: false,
             limit: 10,
-            filters: {},
+            filters: { departmentId: '9876543210987654321' },
           },
         });
 
@@ -377,10 +377,27 @@ describe('ZohoDesk Node', () => {
           'zohoDeskOAuth2Api',
           expect.objectContaining({
             method: 'GET',
-            uri: expect.stringContaining('/archivedTickets'),
+            uri: expect.stringContaining('/tickets/archivedTickets'),
           }),
         );
         expect(result[0]).toHaveLength(2);
+      });
+
+      it('should throw error when listing archived tickets without departmentId', async () => {
+        const mockFunctions = createMockExecuteFunctions({
+          nodeParameters: {
+            resource: 'ticket',
+            operation: 'list',
+            ticketType: 'archived',
+            returnAll: false,
+            limit: 10,
+            filters: {},
+          },
+        });
+
+        await expect(node.execute.call(mockFunctions)).rejects.toThrow(
+          'Department ID is required when listing archived tickets',
+        );
       });
 
       it('should list both active and archived tickets when ticketType is all', async () => {
@@ -393,7 +410,7 @@ describe('ZohoDesk Node', () => {
             ticketType: 'all',
             returnAll: false,
             limit: 10,
-            filters: {},
+            filters: { departmentId: '9876543210987654321' },
           },
         });
 
@@ -408,6 +425,23 @@ describe('ZohoDesk Node', () => {
         // Check _source field is added
         expect(result[0][0].json._source).toBe('active');
         expect(result[0][1].json._source).toBe('archived');
+      });
+
+      it('should throw error when listing all tickets without departmentId', async () => {
+        const mockFunctions = createMockExecuteFunctions({
+          nodeParameters: {
+            resource: 'ticket',
+            operation: 'list',
+            ticketType: 'all',
+            returnAll: false,
+            limit: 10,
+            filters: {},
+          },
+        });
+
+        await expect(node.execute.call(mockFunctions)).rejects.toThrow(
+          'Department ID is required when listing archived tickets',
+        );
       });
 
       it('should fetch all tickets when returnAll is true', async () => {
